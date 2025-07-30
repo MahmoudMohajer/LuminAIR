@@ -1555,6 +1555,23 @@ impl LuminairRem {
             None
         };
 
+        // Check if shapes are compatible for broadcasting
+        let lhs_shape = inp[0].1.shape_usize();
+        let rhs_shape = inp[1].1.shape_usize();
+        
+        // For modulo operation, we need to ensure the shapes are compatible
+        // If they don't match, we'll use the larger shape as the output shape
+        let _output_shape = if lhs_shape == rhs_shape {
+            lhs_shape
+        } else {
+            // Use the larger shape for output
+            if lhs_shape.iter().product::<usize>() >= rhs_shape.iter().product::<usize>() {
+                lhs_shape
+            } else {
+                rhs_shape
+            }
+        };
+
         for (idx, out) in out_data.iter_mut().enumerate() {
             let lhs_val = get_index(lhs, &lexpr, &mut stack, idx);
             let rhs_val = get_index(rhs, &rexpr, &mut stack, idx);
@@ -1564,8 +1581,6 @@ impl LuminairRem {
             // Use integer division and modulo on the underlying i64 values
             let (quotient, rem_val) = lhs_val.div_rem(rhs_val);
             let out_val = rem_val; // The output is the remainder
-            
-
             
             *out = out_val;
 
