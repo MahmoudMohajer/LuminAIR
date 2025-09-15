@@ -24,10 +24,10 @@ use luminair_air::{
         max_reduce::table::{MaxReduceColumn, MaxReduceTraceTable},
         mul::table::{MulColumn, MulTraceTable},
         recip::table::{RecipColumn, RecipTraceTable},
+        rem::table::{RemColumn, RemTraceTable},
         sin::table::{SinColumn, SinTraceTable},
         sqrt::table::{SqrtColumn, SqrtTraceTable},
         sum_reduce::table::{SumReduceColumn, SumReduceTraceTable},
-        rem::table::{RemColumn, RemTraceTable},
     },
     pie::{
         ExecutionResources, InputInfo, LuminairPie, Metadata, NodeInfo, OpCounter, OutputInfo,
@@ -47,7 +47,7 @@ use rustc_hash::FxHashMap;
 /// Trait for LuminAIR graph operations
 pub trait LuminairGraph {
     /// Generates circuit settings for the graph
-    fn gen_circuit_settings(&mut self) -> CircuitSettings;
+    fn gen_circuit_settings(&mut self, fixed_point_scale: u32) -> CircuitSettings;
 
     /// Generates a trace from the graph with the given settings
     fn gen_trace(&mut self, settings: &mut CircuitSettings) -> Result<LuminairPie, LuminairError>;
@@ -58,7 +58,7 @@ pub trait LuminairGraph {
 
 impl LuminairGraph for Graph {
     /// Generates circuit settings by analyzing the graph structure and operations
-    fn gen_circuit_settings(&mut self) -> CircuitSettings {
+    fn gen_circuit_settings(&mut self, fixed_point_scale: u32) -> CircuitSettings {
         // Track the number of views pointing to each tensor so we know when to clear
         if self.linearized_graph.is_none() {
             self.toposort();
@@ -155,6 +155,7 @@ impl LuminairGraph for Graph {
                 log2: log2_lookup,
                 range_check: range_check_lookup,
             },
+            fixed_point_scale,
         }
     }
 
