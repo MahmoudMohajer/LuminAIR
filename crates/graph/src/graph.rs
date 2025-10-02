@@ -22,8 +22,8 @@ use luminair_air::{
             Lookups,
         },
         max_reduce::table::{MaxReduceColumn, MaxReduceTraceTable},
-        mul::table::{MulColumn, MulTraceTable},
-        recip::table::{RecipColumn, RecipTraceTable},
+        mul::table::{MulTraceTable},
+        recip::table::{RecipTraceTable},
         rem::table::{RemColumn, RemTraceTable},
         sin::table::{SinColumn, SinTraceTable},
         sqrt::table::{SqrtColumn, SqrtTraceTable},
@@ -52,7 +52,8 @@ fn try_process_operator<C, T, L>(
     node_info: &NodeInfo,
     lookup: &mut L,
     op_counter: &mut OpCounter,
-    counter_field: &mut u32,
+    counter_field: &mut usize,
+    scale: u32,
 ) -> Option<Vec<Tensor>>
 where
     C: luminair_air::components::TraceColumn + std::fmt::Debug + 'static,
@@ -71,23 +72,23 @@ where
 
 // Macro to handle trace table conversion
 macro_rules! convert_trace_table {
-    ($table:ident, $from_method:ident, $counter:ident) => {
+    ($table:ident, $from_method:ident, $counter:ident, $max_log_size:ident, $trace_tables:ident) => {
         if !$table.table.is_empty() {
             let log_size = calculate_log_size($table.table.len());
-            max_log_size = max_log_size.max(log_size);
-            trace_tables.push(TraceTable::$from_method($table));
+            $max_log_size = $max_log_size.max(log_size);
+            $trace_tables.push(TraceTable::$from_method($table));
         }
     };
-    ($table:ident, $from_method:ident, $counter:ident, $lookup_table:ident, $lookup_from_method:ident, $settings_lookup:expr) => {
+    ($table:ident, $from_method:ident, $counter:ident, $lookup_table:ident, $lookup_from_method:ident, $settings_lookup:expr, $max_log_size:ident, $trace_tables:ident) => {
         if !$table.table.is_empty() {
             let log_size = calculate_log_size($table.table.len());
-            max_log_size = max_log_size.max(log_size);
-            trace_tables.push(TraceTable::$from_method($table));
+            $max_log_size = $max_log_size.max(log_size);
+            $trace_tables.push(TraceTable::$from_method($table));
 
             if let Some(lookup) = $settings_lookup {
                 lookup.add_multiplicities_to_table(&mut $lookup_table);
-                max_log_size = max_log_size.max(lookup.layout.log_size);
-                trace_tables.push(TraceTable::$lookup_from_method($lookup_table))
+                $max_log_size = $max_log_size.max(lookup.layout.log_size);
+                $trace_tables.push(TraceTable::$lookup_from_method($lookup_table))
             }
         }
     };
@@ -300,50 +301,86 @@ impl LuminairGraph for Graph {
                 output: OutputInfo { is_final_output },
                 num_consumers: expansion_adjusted_consumers,
                 id: node.index() as u32,
+                fixed_point_scale: settings.fixed_point_scale,
             };
 
             // Get operator and dispatch to appropriate process_trace handler
             let node_op = &mut *self.graph.node_weight_mut(*node).unwrap();
 
-            let tensors =
-                try_process_operator::<AddColumn, AddTraceTable, ()>(node_op, srcs.clone(), &mut add_table, &node_info, &mut (), &mut op_counter, &mut op_counter.add)
-                .or_else(|| try_process_operator::<MulColumn, MulTraceTable, ()>(node_op, srcs.clone(), &mut mul_table, &node_info, &mut (), &mut op_counter, &mut op_counter.mul))
-                .or_else(|| try_process_operator::<RecipColumn, RecipTraceTable, ()>(node_op, srcs.clone(), &mut recip_table, &node_info, &mut (), &mut op_counter, &mut op_counter.recip))
-                .or_else(|| {
-                    if let Some(lookup) = settings.lookups.sin.as_mut() {
-                        try_process_operator::<SinColumn, SinTraceTable, SinLookup>(node_op, srcs.clone(), &mut sin_table, &node_info, lookup, &mut op_counter, &mut op_counter.sin)
-                    } else {
-                        None
+            // Generate tensors using operator dispatch with dynamic scale
+            // Reconstruct srcs for each operator call since InputTensor doesn't implement Clone
+            let tensors = match () {
+                _ if <Box<dyn Operator> as HasProcessTrace<AddColumn, AddTraceTable, ()>>::has_process_trace(node_op) => {
+                    op_counter.add += 1;
+                    <Box<dyn Operator> as HasProcessTrace<AddColumn, AddTraceTable, ()>>::call_process_trace(
+                        node_op, srcs, &mut add_table, &node_info, &mut ()
+                    ).unwrap()
+                }
+                _ if <Box<dyn Operator> as HasProcessTrace<SumReduceColumn, SumReduceTraceTable, ()>>::has_process_trace(node_op) => {
+                    op_counter.sum_reduce += 1;
+                    <Box<dyn Operator> as HasProcessTrace<SumReduceColumn, SumReduceTraceTable, ()>>::call_process_trace(
+                        node_op, srcs, &mut sum_reduce_table, &node_info, &mut ()
+                    ).unwrap()
+                }
+                _ if <Box<dyn Operator> as HasProcessTrace<MaxReduceColumn, MaxReduceTraceTable, ()>>::has_process_trace(node_op) => {
+                    op_counter.max_reduce += 1;
+                    <Box<dyn Operator> as HasProcessTrace<MaxReduceColumn, MaxReduceTraceTable, ()>>::call_process_trace(
+                        node_op, srcs, &mut max_reduce_table, &node_info, &mut ()
+                    ).unwrap()
+                }
+                _ if <Box<dyn Operator> as HasProcessTrace<SqrtColumn, SqrtTraceTable, ()>>::has_process_trace(node_op) => {
+                    op_counter.sqrt += 1;
+                    <Box<dyn Operator> as HasProcessTrace<SqrtColumn, SqrtTraceTable, ()>>::call_process_trace(
+                        node_op, srcs, &mut sqrt_table, &node_info, &mut ()
+                    ).unwrap()
+                }
+                _ if <Box<dyn Operator> as HasProcessTrace<RemColumn, RemTraceTable, ()>>::has_process_trace(node_op) => {
+                    op_counter.rem += 1;
+                    <Box<dyn Operator> as HasProcessTrace<RemColumn, RemTraceTable, ()>>::call_process_trace(
+                        node_op, srcs, &mut rem_table, &node_info, &mut ()
+                    ).unwrap()
+                }
+                _ if <Box<dyn Operator> as HasProcessTrace<Exp2Column, Exp2TraceTable, Exp2Lookup>>::has_process_trace(node_op) => {
+                    op_counter.exp2 += 1;
+                    match settings.lookups.exp2.as_mut() {
+                        Some(lookup) => <Box<dyn Operator> as HasProcessTrace<Exp2Column, Exp2TraceTable, Exp2Lookup>>::call_process_trace(
+                            node_op, srcs, &mut exp2_table, &node_info, lookup
+                        ).unwrap(),
+                        None => unreachable!("Exp2 lookup table must be initialized"),
                     }
-                })
-                .or_else(|| try_process_operator::<SumReduceColumn, SumReduceTraceTable, ()>(node_op, srcs.clone(), &mut sum_reduce_table, &node_info, &mut (), &mut op_counter, &mut op_counter.sum_reduce))
-                .or_else(|| try_process_operator::<MaxReduceColumn, MaxReduceTraceTable, ()>(node_op, srcs.clone(), &mut max_reduce_table, &node_info, &mut (), &mut op_counter, &mut op_counter.max_reduce))
-                .or_else(|| try_process_operator::<SqrtColumn, SqrtTraceTable, ()>(node_op, srcs.clone(), &mut sqrt_table, &node_info, &mut (), &mut op_counter, &mut op_counter.sqrt))
-                .or_else(|| try_process_operator::<RemColumn, RemTraceTable, ()>(node_op, srcs.clone(), &mut rem_table, &node_info, &mut (), &mut op_counter, &mut op_counter.rem))
-                .or_else(|| {
-                    if let Some(lookup) = settings.lookups.exp2.as_mut() {
-                        try_process_operator::<Exp2Column, Exp2TraceTable, Exp2Lookup>(node_op, srcs.clone(), &mut exp2_table, &node_info, lookup, &mut op_counter, &mut op_counter.exp2)
-                    } else {
-                        None
+                }
+                _ if <Box<dyn Operator> as HasProcessTrace<Log2Column, Log2TraceTable, Log2Lookup>>::has_process_trace(node_op) => {
+                    op_counter.log2 += 1;
+                    match settings.lookups.log2.as_mut() {
+                        Some(lookup) => <Box<dyn Operator> as HasProcessTrace<Log2Column, Log2TraceTable, Log2Lookup>>::call_process_trace(
+                            node_op, srcs, &mut log2_table, &node_info, lookup
+                        ).unwrap(),
+                        None => unreachable!("Log2 lookup table must be initialized"),
                     }
-                })
-                .or_else(|| {
-                    if let Some(lookup) = settings.lookups.log2.as_mut() {
-                        try_process_operator::<Log2Column, Log2TraceTable, Log2Lookup>(node_op, srcs.clone(), &mut log2_table, &node_info, lookup, &mut op_counter, &mut op_counter.log2)
-                    } else {
-                        None
+                }
+                _ if <Box<dyn Operator> as HasProcessTrace<LessThanColumn, LessThanTraceTable, RangeCheckLookup<1>>>::has_process_trace(node_op) => {
+                    op_counter.less_than += 1;
+                    match settings.lookups.range_check.as_mut() {
+                        Some(lookup) => <Box<dyn Operator> as HasProcessTrace<LessThanColumn, LessThanTraceTable, RangeCheckLookup<1>>>::call_process_trace(
+                            node_op, srcs, &mut less_than_table, &node_info, lookup
+                        ).unwrap(),
+                        None => unreachable!("Range check lookup table must be initialized"),
                     }
-                })
-                .or_else(|| {
-                    if let Some(lookup) = settings.lookups.range_check.as_mut() {
-                        try_process_operator::<LessThanColumn, LessThanTraceTable, RangeCheckLookup<1>>(node_op, srcs.clone(), &mut less_than_table, &node_info, lookup, &mut op_counter, &mut op_counter.less_than)
-                    } else {
-                        None
-                    }
-                })
-                .or_else(|| try_process_operator::<InputsColumn, InputsTraceTable, ()>(node_op, srcs.clone(), &mut inputs_table, &node_info, &mut (), &mut op_counter, &mut op_counter.inputs))
-                .or_else(|| try_process_operator::<ContiguousColumn, ContiguousTraceTable, ()>(node_op, srcs.clone(), &mut contiguous_table, &node_info, &mut (), &mut op_counter, &mut op_counter.contiguous))
-                .unwrap_or_else(|| node_op.process(srcs));
+                }
+                _ if <Box<dyn Operator> as HasProcessTrace<InputsColumn, InputsTraceTable, ()>>::has_process_trace(node_op) => {
+                    op_counter.inputs += 1;
+                    <Box<dyn Operator> as HasProcessTrace<InputsColumn, InputsTraceTable, ()>>::call_process_trace(
+                        node_op, srcs, &mut inputs_table, &node_info, &mut ()
+                    ).unwrap()
+                }
+                _ if <Box<dyn Operator> as HasProcessTrace<ContiguousColumn, ContiguousTraceTable, ()>>::has_process_trace(node_op) => {
+                    op_counter.contiguous += 1;
+                    <Box<dyn Operator> as HasProcessTrace<ContiguousColumn, ContiguousTraceTable, ()>>::call_process_trace(
+                        node_op, srcs, &mut contiguous_table, &node_info, &mut ()
+                    ).unwrap()
+                }
+                _ => node_op.process(srcs)
+            };
 
             // Store output tensors
             for (i, tensor) in tensors.into_iter().enumerate() {
@@ -362,19 +399,19 @@ impl LuminairGraph for Graph {
         let mut max_log_size = 0;
         let mut trace_tables = Vec::new();
 
-        convert_trace_table!(add_table, from_add, add);
-        convert_trace_table!(mul_table, from_mul, mul);
-        convert_trace_table!(recip_table, from_recip, recip);
-        convert_trace_table!(sin_table, from_sin, sin, sin_lookup_table, from_sin_lookup, settings.lookups.sin.as_ref());
-        convert_trace_table!(sum_reduce_table, from_sum_reduce, sum_reduce);
-        convert_trace_table!(max_reduce_table, from_max_reduce, max_reduce);
-        convert_trace_table!(sqrt_table, from_sqrt, sqrt);
-        convert_trace_table!(rem_table, from_rem, rem);
-        convert_trace_table!(exp2_table, from_exp2, exp2, exp2_lookup_table, from_exp2_lookup, settings.lookups.exp2.as_ref());
-        convert_trace_table!(log2_table, from_log2, log2, log2_lookup_table, from_log2_lookup, settings.lookups.log2.as_ref());
-        convert_trace_table!(less_than_table, from_less_than, less_than, range_check_lookup_table, from_range_check_lookup, settings.lookups.range_check.as_ref());
-        convert_trace_table!(inputs_table, from_inputs, inputs);
-        convert_trace_table!(contiguous_table, from_contiguous, contiguous);
+        convert_trace_table!(add_table, from_add, add, max_log_size, trace_tables);
+        convert_trace_table!(mul_table, from_mul, mul, max_log_size, trace_tables);
+        convert_trace_table!(recip_table, from_recip, recip, max_log_size, trace_tables);
+        convert_trace_table!(sin_table, from_sin, sin, sin_lookup_table, from_sin_lookup, settings.lookups.sin.as_ref(), max_log_size, trace_tables);
+        convert_trace_table!(sum_reduce_table, from_sum_reduce, sum_reduce, max_log_size, trace_tables);
+        convert_trace_table!(max_reduce_table, from_max_reduce, max_reduce, max_log_size, trace_tables);
+        convert_trace_table!(sqrt_table, from_sqrt, sqrt, max_log_size, trace_tables);
+        convert_trace_table!(rem_table, from_rem, rem, max_log_size, trace_tables);
+        convert_trace_table!(exp2_table, from_exp2, exp2, exp2_lookup_table, from_exp2_lookup, settings.lookups.exp2.as_ref(), max_log_size, trace_tables);
+        convert_trace_table!(log2_table, from_log2, log2, log2_lookup_table, from_log2_lookup, settings.lookups.log2.as_ref(), max_log_size, trace_tables);
+        convert_trace_table!(less_than_table, from_less_than, less_than, range_check_lookup_table, from_range_check_lookup, settings.lookups.range_check.as_ref(), max_log_size, trace_tables);
+        convert_trace_table!(inputs_table, from_inputs, inputs, max_log_size, trace_tables);
+        convert_trace_table!(contiguous_table, from_contiguous, contiguous, max_log_size, trace_tables);
 
         Ok(LuminairPie {
             trace_tables,
@@ -452,7 +489,7 @@ fn coalesce_ranges(mut ranges: Vec<Range>) -> Vec<Range> {
     }
 
     // Sort by lower bound
-    ranges.sort_unstable_by_key(|r| r.0 .0);
+    ranges.sort_unstable_by_key(|r| r.0.value);
 
     // Use the first element as the starting point
     let mut result = Vec::with_capacity(ranges.len());
@@ -460,9 +497,9 @@ fn coalesce_ranges(mut ranges: Vec<Range>) -> Vec<Range> {
 
     // Merge overlapping or adjacent ranges
     for range in ranges.into_iter().skip(1) {
-        if range.0 .0 <= current_range.1 .0 + 1 {
+        if range.0.value <= current_range.1.value + 1 {
             // Merge ranges if they overlap or are adjacent
-            current_range.1 = Fixed(current_range.1 .0.max(range.1 .0));
+            current_range.1 = Fixed::new(current_range.1.value.max(range.1.value), current_range.1.scale);
         } else {
             // No overlap, push the current range and start a new one
             result.push(current_range);

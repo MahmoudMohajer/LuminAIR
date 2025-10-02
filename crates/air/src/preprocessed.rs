@@ -7,7 +7,6 @@ use crate::{
         TraceEval,
     },
     utils::calculate_log_size,
-    DEFAULT_FP_SCALE,
 };
 use itertools::Itertools;
 use numerair::Fixed;
@@ -32,7 +31,7 @@ use stwo_constraint_framework::preprocessed_columns::PreProcessedColumnId;
 ///
 /// Contains minimum and maximum values (inclusive) for a range of inputs
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Range(pub Fixed<DEFAULT_FP_SCALE>, pub Fixed<DEFAULT_FP_SCALE>);
+pub struct Range(pub Fixed, pub Fixed);
 
 /// Layout configuration for lookup tables
 ///
@@ -65,11 +64,11 @@ impl LookupLayout {
                 let mut cumulative_count = 0;
                 for i in 0..range_idx {
                     let r = &self.ranges[i];
-                    cumulative_count += (r.1 .0 - r.0 .0 + 1) as usize;
+                    cumulative_count += (r.1.value - r.0.value + 1) as usize;
                 }
 
                 // Add the offset within the found range
-                let offset = (target - range.0 .0) as usize;
+                let offset = (target - range.0.value) as usize;
                 Some(cumulative_count + offset)
             }
             None => None,
@@ -91,12 +90,12 @@ impl LookupLayout {
             let range = &self.ranges[mid];
 
             // Check if target is in this range
-            if target >= range.0 .0 && target <= range.1 .0 {
+            if target >= range.0.value && target <= range.1.value {
                 return Some((mid, range));
             }
 
             // Adjust search boundaries
-            if target < range.0 .0 {
+            if target < range.0.value {
                 // Target is before this range
                 if mid == 0 {
                     break; // Can't go left further
@@ -116,7 +115,7 @@ impl LookupLayout {
 }
 
 fn value_count(ranges: &Vec<Range>) -> u32 {
-    ranges.iter().map(|r| (r.1 .0 - r.0 .0 + 1) as u32).sum()
+    ranges.iter().map(|r| (r.1.value - r.0.value + 1) as u32).sum()
 }
 
 /// Trait for preprocessed columns used in STARK proving
@@ -178,11 +177,11 @@ impl PreProcessedTrace {
 ///
 /// Creates the appropriate preprocessed column types for each lookup table
 /// that is present in the lookups configuration
-pub fn lookups_to_preprocessed_column(lookups: &Lookups) -> Vec<Box<dyn PreProcessedColumn>> {
+pub fn lookups_to_preprocessed_column(lookups: &Lookups, scale: u32) -> Vec<Box<dyn PreProcessedColumn>> {
     let mut lut_cols: Vec<Box<dyn PreProcessedColumn>> = Vec::new();
     if let Some(sin_lookup) = &lookups.sin {
-        let col_0 = SinPreProcessed::new(sin_lookup.layout.clone(), 0);
-        let col_1 = SinPreProcessed::new(sin_lookup.layout.clone(), 1);
+        let col_0 = SinPreProcessed::new(sin_lookup.layout.clone(), 0, scale);
+        let col_1 = SinPreProcessed::new(sin_lookup.layout.clone(), 1, scale);
         lut_cols.push(Box::new(col_0));
         lut_cols.push(Box::new(col_1));
     }
@@ -315,16 +314,18 @@ pub struct SinPreProcessed {
     pub layout: LookupLayout,
     /// Index of this specific column (0 for input, 1 for output)
     pub col_index: usize,
+    /// Fixed-point scale used for this preprocessing column
+    pub scale: u32,
 }
 
 impl SinPreProcessed {
     /// Creates a new SinPreProcessed with the specified layout and column index
     ///
     /// Asserts that the column index is less than 2 (sine LUT has 2 columns)
-    pub fn new(layout: LookupLayout, col_index: usize) -> Self {
+    pub fn new(layout: LookupLayout, col_index: usize, scale: u32) -> Self {
         assert!(col_index < 2, "Sin LUT must have 2 columns");
 
-        Self { layout, col_index }
+        Self { layout, col_index, scale }
     }
 
     /// Returns the circle evaluation for this sine lookup column
@@ -357,7 +358,7 @@ impl PreProcessedColumn for SinPreProcessed {
             .layout
             .ranges
             .iter()
-            .flat_map(|r| (r.0 .0..=r.1 .0))
+            .flat_map(|r| (r.0.value..=r.1.value))
             .collect();
         all_values.sort_unstable();
         all_values.dedup();
@@ -367,11 +368,12 @@ impl PreProcessedColumn for SinPreProcessed {
 
         for (i, value) in all_values.iter().enumerate() {
             match self.col_index {
-                0 => column.set(i, Fixed::<DEFAULT_FP_SCALE>(*value).to_m31()),
+                0 => column.set(i, Fixed::new(*value, self.scale).to_m31()),
                 1 => column.set(
                     i,
-                    Fixed::<DEFAULT_FP_SCALE>::from_f64(
-                        Fixed::<DEFAULT_FP_SCALE>(*value).to_f64().sin(),
+                    Fixed::from_f64(
+                        Fixed::new(*value, self.scale).to_f64().sin(),
+                        self.scale,
                     )
                     .to_m31(),
                 ),
@@ -440,7 +442,7 @@ impl PreProcessedColumn for Exp2PreProcessed {
             .layout
             .ranges
             .iter()
-            .flat_map(|r| (r.0 .0..=r.1 .0))
+            .flat_map(|r| (r.0.value..=r.1.value))
             .collect();
         all_values.sort_unstable();
         all_values.dedup();
@@ -450,11 +452,12 @@ impl PreProcessedColumn for Exp2PreProcessed {
 
         for (i, value) in all_values.iter().enumerate() {
             match self.col_index {
-                0 => column.set(i, Fixed::<DEFAULT_FP_SCALE>(*value).to_m31()),
+                0 => column.set(i, Fixed::new(*value, 12).to_m31()),
                 1 => column.set(
                     i,
-                    Fixed::<DEFAULT_FP_SCALE>::from_f64(
-                        Fixed::<DEFAULT_FP_SCALE>(*value).to_f64().exp2(),
+                    Fixed::from_f64(
+                        Fixed::new(*value, 12).to_f64().exp2(),
+                        12,
                     )
                     .to_m31(),
                 ),
@@ -523,7 +526,7 @@ impl PreProcessedColumn for Log2PreProcessed {
             .layout
             .ranges
             .iter()
-            .flat_map(|r| (r.0 .0..=r.1 .0))
+            .flat_map(|r| (r.0.value..=r.1.value))
             .collect();
         all_values.sort_unstable();
         all_values.dedup();
@@ -533,11 +536,12 @@ impl PreProcessedColumn for Log2PreProcessed {
 
         for (i, value) in all_values.iter().enumerate() {
             match self.col_index {
-                0 => column.set(i, Fixed::<DEFAULT_FP_SCALE>(*value).to_m31()),
+                0 => column.set(i, Fixed::new(*value, 12).to_m31()),
                 1 => column.set(
                     i,
-                    Fixed::<DEFAULT_FP_SCALE>::from_f64(
-                        Fixed::<DEFAULT_FP_SCALE>(*value).to_f64().log2(),
+                    Fixed::from_f64(
+                        Fixed::new(*value, 12).to_f64().log2(),
+                        12,
                     )
                     .to_m31(),
                 ),

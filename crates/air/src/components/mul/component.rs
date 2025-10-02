@@ -1,10 +1,9 @@
 use crate::{
     components::{MulClaim, NodeElements},
-    DEFAULT_FP_SCALE,
 };
 use num_traits::One;
 use numerair::eval::EvalFixedPoint;
-use stwo::core::fields::m31::M31;
+// Scale is now extracted from trace data
 use stwo_constraint_framework::{EvalAtRow, FrameworkComponent, FrameworkEval, RelationEntry};
 
 pub type MulComponent = FrameworkComponent<MulEval>;
@@ -62,7 +61,8 @@ impl FrameworkEval for MulEval {
         let rhs_mult = eval.next_trace_mask();
         let out_mult = eval.next_trace_mask();
 
-        let scale_factor = E::F::from(M31::from_u32_unchecked(1 << DEFAULT_FP_SCALE));
+        // Extract dynamic scale from trace data (Scale field in MulColumn)
+        let scale_factor = eval.next_trace_mask(); // Read scale from trace data
 
         // ┌─────────────────────────────┐
         // │   Consistency Constraints   │

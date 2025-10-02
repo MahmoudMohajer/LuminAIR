@@ -9,7 +9,7 @@ use stwo::{
 };
 
 use super::witness::N_TRACE_COLUMNS;
-use crate::{components::TraceColumn, DEFAULT_FP_SCALE};
+use crate::{components::TraceColumn};
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct LessThanTraceTable {
@@ -57,7 +57,8 @@ impl LessThanTraceTableRow {
             next_idx: M31::zero(),
             lhs: M31::zero(),
             rhs: M31::one(),
-            out: M31::from_u32_unchecked(1 << DEFAULT_FP_SCALE),
+            // Use consistent default scale (matches CircuitSettings typical value)
+            out: M31::from_u32_unchecked(1 << 12),
             diff: M31::one(),
             borrow: M31::zero(),
             limb0: M31::one(),
