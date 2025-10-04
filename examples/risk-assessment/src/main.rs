@@ -85,7 +85,7 @@ fn main() {
         &mut (&mut cvar_out, &mut var_out, &mut max_loss_out),
     );
 
-    let mut settings = cx.gen_circuit_settings(12);
+    let mut settings = cx.gen_circuit_settings(16);
     let trace = cx.gen_trace(&mut settings).unwrap();
     let t_prove = Instant::now();
     let zk_proof = prove(trace, settings.clone()).unwrap();

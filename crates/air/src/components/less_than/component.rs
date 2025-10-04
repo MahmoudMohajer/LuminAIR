@@ -49,8 +49,6 @@ impl FrameworkEval for LessThanEval {
     fn evaluate<E: EvalAtRow>(&self, mut eval: E) -> E {
         // Use 31 bits for the constraint (maximum for M31 field)
         let two_pow_k = E::F::from(M31::from_u32_unchecked(TWO_POW_31_MINUS_1));
-        // Extract dynamic scale from trace data (consistent with CircuitSettings)  
-        let scale_factor = E::F::from(M31::from_u32_unchecked(1 << 12)); // TODO: Extract from trace data
 
         // IDs
         let node_id = eval.next_trace_mask();
@@ -77,6 +75,9 @@ impl FrameworkEval for LessThanEval {
         let limb1 = eval.next_trace_mask();
         let limb2 = eval.next_trace_mask();
         let limb3 = eval.next_trace_mask();
+
+        // Extract dynamic scale from trace data (consistent with CircuitSettings)  
+        let scale_factor = eval.next_trace_mask();
 
         // Multiplicities for interaction constraints
         let lhs_mult = eval.next_trace_mask();

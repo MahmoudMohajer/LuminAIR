@@ -56,13 +56,13 @@ impl FrameworkEval for MulEval {
         let out_val = eval.next_trace_mask(); // Value in output tensor at index.
         let rem_val = eval.next_trace_mask(); // Rem value in result tensor at index.
 
-        // Multiplicities for interaction constraints
-        let lhs_mult = eval.next_trace_mask();
-        let rhs_mult = eval.next_trace_mask();
-        let out_mult = eval.next_trace_mask();
+        // Extract dynamic scale from trace data (attrs field in MulColumn)  
+        let scale_factor = eval.next_trace_mask(); // Scale is at column index 13
 
-        // Extract dynamic scale from trace data (Scale field in MulColumn)
-        let scale_factor = eval.next_trace_mask(); // Read scale from trace data
+        // Multiplicities for interaction constraints
+        let lhs_mult = eval.next_trace_mask(); // LhsMult is at column index 14
+        let rhs_mult = eval.next_trace_mask(); // RhsMult is at column index 15
+        let out_mult = eval.next_trace_mask(); // OutMult is at column index 16
 
         // ┌─────────────────────────────┐
         // │   Consistency Constraints   │
@@ -75,7 +75,7 @@ impl FrameworkEval for MulEval {
         eval.eval_fixed_mul(
             lhs_val.clone(),
             rhs_val.clone(),
-            scale_factor,
+            scale_factor.clone(),
             out_val.clone(),
             rem_val,
         );
@@ -101,6 +101,8 @@ impl FrameworkEval for MulEval {
         // ┌─────────────────────────────┐
         // │   Interaction Constraints   │
         // └─────────────────────────────┘
+
+        // Values are already scaled in the trace, no need to re-scale
 
         eval.add_to_relation(RelationEntry::new(
             &self.node_elements,

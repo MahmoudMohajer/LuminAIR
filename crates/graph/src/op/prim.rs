@@ -167,8 +167,9 @@ impl LuminairOperator<InputsColumn, InputsTraceTable, ()> for LuminairConstant {
         };
 
         // Create and return a single element with the constant value
+        let scale = node_info.fixed_point_scale;
         let mut data = Vec::with_capacity(1);
-        data.push(Fixed::from_f64(*value as f64, 12));
+        data.push(Fixed::from_f64(*value as f64, scale));
 
         let node_id: BaseField = node_info.id.into();
 
@@ -250,7 +251,8 @@ impl LuminairOperator<ContiguousColumn, ContiguousTraceTable, ()> for LuminairCo
         };
 
         let mut stack: Vec<i64> = Vec::new();
-        let mut out_data = vec![Fixed::zero(12); output_size];
+        let scale = node_info.fixed_point_scale;
+        let mut out_data = vec![Fixed::zero(scale); output_size];
 
         // zip_longest will run until *both* iterators are exhausted:
         //  - for idx < output_size → Both or Right
@@ -272,7 +274,7 @@ impl LuminairOperator<ContiguousColumn, ContiguousTraceTable, ()> for LuminairCo
                 }
                 EitherOrBoth::Right(output_ref) => {
                     // no input left → input is zero
-                    let input_val = Fixed::zero(12);
+                    let input_val = Fixed::zero(scale);
                     let computed = get_index(&inp_data, &expr, &mut stack, idx);
                     *output_ref = computed;
                     (input_val, *output_ref)
@@ -298,7 +300,7 @@ impl LuminairOperator<ContiguousColumn, ContiguousTraceTable, ()> for LuminairCo
             idx += 1;
         }
 
-        vec![Tensor::new(StwoData { data: Arc::new(out_data), scale: 12 })]
+        vec![Tensor::new(StwoData { data: Arc::new(out_data), scale })]
     }
 }
 
@@ -348,6 +350,7 @@ impl LuminairRecip {
         &self,
         inp: &[(InputTensor, ShapeTracker)],
         trace_mode: bool,
+        scale: u32,
     ) -> (
         Vec<Fixed>,
         Option<
@@ -363,7 +366,7 @@ impl LuminairRecip {
 
         let mut stack: Vec<i64> = vec![];
         let output_size = inp[0].1.n_elements().to_usize().unwrap();
-        let mut out_data = vec![Fixed::zero(12); output_size];
+        let mut out_data = vec![Fixed::zero(scale); output_size];
 
         // Only allocate for intermediate values if in trace mode
         let mut intermediate_values = if trace_mode {
@@ -395,7 +398,8 @@ impl LuminairOperator<RecipColumn, RecipTraceTable, ()> for LuminairRecip {
         node_info: &NodeInfo,
         _lookup: &mut (),
     ) -> Vec<Tensor> {
-        let (out_data, intermediate_values) = self.compute(&inp, true);
+        let scale = node_info.fixed_point_scale;
+        let (out_data, intermediate_values) = self.compute(&inp, true, scale);
         let intermediate_values = intermediate_values.unwrap();
 
         let node_id: BaseField = node_info.id.into();
@@ -422,7 +426,7 @@ impl LuminairOperator<RecipColumn, RecipTraceTable, ()> for LuminairRecip {
                 input: input_val.to_m31(),
                 out: out_val.to_m31(),
                 rem: rem_val.to_m31(),
-                scale: M31::from_u32_unchecked(1 << 12),
+                scale: M31::from_u32_unchecked(1 << scale),
                 input_mult: -BaseField::one(),
                 out_mult,
             });
@@ -434,7 +438,7 @@ impl LuminairOperator<RecipColumn, RecipTraceTable, ()> for LuminairRecip {
 
 impl Operator for LuminairRecip {
     fn process(&mut self, inp: Vec<(InputTensor, ShapeTracker)>) -> Vec<Tensor> {
-        let (out_data, _) = self.compute(&inp, false);
+        let (out_data, _) = self.compute(&inp, false, 12);
         vec![Tensor::new(StwoData { data: Arc::new(out_data), scale: 12 })]
     }
 }
@@ -462,6 +466,7 @@ impl LuminairSin {
         &self,
         inp: &[(InputTensor, ShapeTracker)],
         trace_mode: bool,
+        scale: u32,
     ) -> (
         Vec<Fixed>,
         Option<Vec<(Fixed, Fixed)>>,
@@ -471,7 +476,7 @@ impl LuminairSin {
 
         let mut stack: Vec<i64> = vec![];
         let output_size = inp[0].1.n_elements().to_usize().unwrap();
-        let mut out_data = vec![Fixed::zero(12); output_size];
+        let mut out_data = vec![Fixed::zero(scale); output_size];
 
         // Only allocate for intermediate values if in trace mode
         let mut intermediate_values = if trace_mode {
@@ -482,7 +487,7 @@ impl LuminairSin {
 
         for (idx, out) in out_data.iter_mut().enumerate() {
             let input_val = get_index(input, &expr, &mut stack, idx);
-            let out_val = Fixed::from_f64(input_val.value.to_f64().unwrap().sin(), 12);
+            let out_val = Fixed::from_f64(input_val.value.to_f64().unwrap().sin(), scale);
             *out = out_val;
 
             // Only collect intermediate values if in trace mode
@@ -503,7 +508,8 @@ impl LuminairOperator<SinColumn, SinTraceTable, SinLookup> for LuminairSin {
         node_info: &NodeInfo,
         lookup: &mut SinLookup,
     ) -> Vec<Tensor> {
-        let (out_data, intermediate_values) = self.compute(&inp, true);
+        let scale = node_info.fixed_point_scale;
+        let (out_data, intermediate_values) = self.compute(&inp, true, scale);
         let intermediate_values = intermediate_values.unwrap();
 
         let node_id: BaseField = node_info.id.into();
@@ -549,7 +555,7 @@ impl LuminairOperator<SinColumn, SinTraceTable, SinLookup> for LuminairSin {
 
 impl Operator for LuminairSin {
     fn process(&mut self, inp: Vec<(InputTensor, ShapeTracker)>) -> Vec<Tensor> {
-        let (out_data, _) = self.compute(&inp, false);
+        let (out_data, _) = self.compute(&inp, false, 12);
         vec![Tensor::new(StwoData { data: Arc::new(out_data), scale: 12 })]
     }
 }
@@ -577,6 +583,7 @@ impl LuminairSqrt {
         &self,
         inp: &[(InputTensor, ShapeTracker)],
         trace_mode: bool,
+        scale: u32,
     ) -> (
         Vec<Fixed>,
         Option<
@@ -592,7 +599,7 @@ impl LuminairSqrt {
 
         let mut stack: Vec<i64> = vec![];
         let output_size = inp[0].1.n_elements().to_usize().unwrap();
-        let mut out_data = vec![Fixed::zero(12); output_size];
+        let mut out_data = vec![Fixed::zero(scale); output_size];
 
         // Only allocate for intermediate values if in trace mode
         let mut intermediate_values = if trace_mode {
@@ -624,7 +631,8 @@ impl LuminairOperator<SqrtColumn, SqrtTraceTable, ()> for LuminairSqrt {
         node_info: &NodeInfo,
         _lookup: &mut (),
     ) -> Vec<Tensor> {
-        let (out_data, intermediate_values) = self.compute(&inp, true);
+        let scale = node_info.fixed_point_scale;
+        let (out_data, intermediate_values) = self.compute(&inp, true, scale);
         let intermediate_values = intermediate_values.unwrap();
 
         let node_id: BaseField = node_info.id.into();
@@ -651,7 +659,7 @@ impl LuminairOperator<SqrtColumn, SqrtTraceTable, ()> for LuminairSqrt {
                 input: input_val.to_m31(),
                 out: out_val.to_m31(),
                 rem: rem_val.to_m31(),
-                scale: M31::from_u32_unchecked(1 << 12),
+                scale: M31::from_u32_unchecked(1 << scale),
                 input_mult: -BaseField::one(),
                 out_mult,
             });
@@ -663,7 +671,7 @@ impl LuminairOperator<SqrtColumn, SqrtTraceTable, ()> for LuminairSqrt {
 
 impl Operator for LuminairSqrt {
     fn process(&mut self, inp: Vec<(InputTensor, ShapeTracker)>) -> Vec<Tensor> {
-        let (out_data, _) = self.compute(&inp, false);
+        let (out_data, _) = self.compute(&inp, false, 12);
         vec![Tensor::new(StwoData { data: Arc::new(out_data), scale: 12 })]
     }
 }
@@ -691,6 +699,7 @@ impl LuminairExp2 {
         &self,
         inp: &[(InputTensor, ShapeTracker)],
         trace_mode: bool,
+        scale: u32,
     ) -> (
         Vec<Fixed>,
         Option<Vec<(Fixed, Fixed)>>,
@@ -700,7 +709,7 @@ impl LuminairExp2 {
 
         let mut stack: Vec<i64> = vec![];
         let output_size = inp[0].1.n_elements().to_usize().unwrap();
-        let mut out_data = vec![Fixed::zero(12); output_size];
+        let mut out_data = vec![Fixed::zero(scale); output_size];
 
         // Only allocate for intermediate values if in trace mode
         let mut intermediate_values = if trace_mode {
@@ -711,7 +720,7 @@ impl LuminairExp2 {
 
         for (idx, out) in out_data.iter_mut().enumerate() {
             let input_val = get_index(input, &expr, &mut stack, idx);
-            let out_val = Fixed::from_f64(input_val.value.to_f64().unwrap().exp2(), 12);
+            let out_val = Fixed::from_f64(input_val.value.to_f64().unwrap().exp2(), scale);
             *out = out_val;
 
             // Only collect intermediate values if in trace mode
@@ -732,7 +741,8 @@ impl LuminairOperator<Exp2Column, Exp2TraceTable, Exp2Lookup> for LuminairExp2 {
         node_info: &NodeInfo,
         lookup: &mut Exp2Lookup,
     ) -> Vec<Tensor> {
-        let (out_data, intermediate_values) = self.compute(&inp, true);
+        let scale = node_info.fixed_point_scale;
+        let (out_data, intermediate_values) = self.compute(&inp, true, scale);
         let intermediate_values = intermediate_values.unwrap();
 
         let node_id: BaseField = node_info.id.into();
@@ -778,7 +788,7 @@ impl LuminairOperator<Exp2Column, Exp2TraceTable, Exp2Lookup> for LuminairExp2 {
 
 impl Operator for LuminairExp2 {
     fn process(&mut self, inp: Vec<(InputTensor, ShapeTracker)>) -> Vec<Tensor> {
-        let (out_data, _) = self.compute(&inp, false);
+        let (out_data, _) = self.compute(&inp, false, 12);
         vec![Tensor::new(StwoData { data: Arc::new(out_data), scale: 12 })]
     }
 }
@@ -806,6 +816,7 @@ impl LuminairLog2 {
         &self,
         inp: &[(InputTensor, ShapeTracker)],
         trace_mode: bool,
+        scale: u32,
     ) -> (
         Vec<Fixed>,
         Option<Vec<(Fixed, Fixed)>>,
@@ -815,7 +826,7 @@ impl LuminairLog2 {
 
         let mut stack: Vec<i64> = vec![];
         let output_size = inp[0].1.n_elements().to_usize().unwrap();
-        let mut out_data = vec![Fixed::zero(12); output_size];
+        let mut out_data = vec![Fixed::zero(scale); output_size];
 
         // Only allocate for intermediate values if in trace mode
         let mut intermediate_values = if trace_mode {
@@ -826,7 +837,7 @@ impl LuminairLog2 {
 
         for (idx, out) in out_data.iter_mut().enumerate() {
             let input_val = get_index(input, &expr, &mut stack, idx);
-            let out_val = Fixed::from_f64(input_val.value.to_f64().unwrap().log2(), 12);
+            let out_val = Fixed::from_f64(input_val.value.to_f64().unwrap().log2(), scale);
             *out = out_val;
 
             // Only collect intermediate values if in trace mode
@@ -847,7 +858,8 @@ impl LuminairOperator<Log2Column, Log2TraceTable, Log2Lookup> for LuminairLog2 {
         node_info: &NodeInfo,
         lookup: &mut Log2Lookup,
     ) -> Vec<Tensor> {
-        let (out_data, intermediate_values) = self.compute(&inp, true);
+        let scale = node_info.fixed_point_scale;
+        let (out_data, intermediate_values) = self.compute(&inp, true, scale);
         let intermediate_values = intermediate_values.unwrap();
 
         let node_id: BaseField = node_info.id.into();
@@ -893,7 +905,7 @@ impl LuminairOperator<Log2Column, Log2TraceTable, Log2Lookup> for LuminairLog2 {
 
 impl Operator for LuminairLog2 {
     fn process(&mut self, inp: Vec<(InputTensor, ShapeTracker)>) -> Vec<Tensor> {
-        let (out_data, _) = self.compute(&inp, false);
+        let (out_data, _) = self.compute(&inp, false, 12);
         vec![Tensor::new(StwoData { data: Arc::new(out_data), scale: 12 })]
     }
 }
@@ -923,6 +935,7 @@ impl LuminairAdd {
         &self,
         inp: &[(InputTensor, ShapeTracker)],
         trace_mode: bool,
+        scale: u32,
     ) -> (
         Vec<Fixed>,
         Option<
@@ -942,7 +955,7 @@ impl LuminairAdd {
 
         let mut stack: Vec<i64> = vec![];
         let output_size = inp[0].1.n_elements().to_usize().unwrap();
-        let mut out_data = vec![Fixed::zero(12); output_size];
+        let mut out_data = vec![Fixed::zero(scale); output_size];
 
         // Only allocate for intermediate values if in trace mode
         let mut intermediate_values = if trace_mode {
@@ -975,7 +988,7 @@ impl LuminairOperator<AddColumn, AddTraceTable, ()> for LuminairAdd {
         _lookup: &mut (),
     ) -> Vec<Tensor> {
         let scale = node_info.fixed_point_scale;
-        let (out_data, intermediate_values) = self.compute(&inp, true);
+        let (out_data, intermediate_values) = self.compute(&inp, true, scale);
         let intermediate_values = intermediate_values.unwrap();
 
         let output_size = inp[0].1.n_elements().to_usize().unwrap();
@@ -1017,7 +1030,7 @@ impl LuminairOperator<AddColumn, AddTraceTable, ()> for LuminairAdd {
 
 impl Operator for LuminairAdd {
     fn process(&mut self, inp: Vec<(InputTensor, ShapeTracker)>) -> Vec<Tensor> {
-        let (out_data, _) = self.compute(&inp, false);
+        let (out_data, _) = self.compute(&inp, false, 12);
         vec![Tensor::new(StwoData { data: Arc::new(out_data), scale: 12 })]
     }
 }
@@ -1045,6 +1058,7 @@ impl LuminairMul {
         &self,
         inp: &[(InputTensor, ShapeTracker)],
         trace_mode: bool,
+        scale: u32,
     ) -> (
         Vec<Fixed>,
         Option<
@@ -1065,7 +1079,7 @@ impl LuminairMul {
 
         let mut stack: Vec<i64> = vec![];
         let output_size = inp[0].1.n_elements().to_usize().unwrap();
-        let mut out_data = vec![Fixed::zero(12); output_size];
+        let mut out_data = vec![Fixed::zero(scale); output_size];
 
         // Only allocate for intermediate values if in trace mode
         let mut intermediate_values = if trace_mode {
@@ -1098,10 +1112,11 @@ impl LuminairOperator<MulColumn, MulTraceTable, ()> for LuminairMul {
         node_info: &NodeInfo,
         _lookup: &mut (),
     ) -> Vec<Tensor> {
-        let (out_data, intermediate_values) = self.compute(&inp, true);
-        let intermediate_values = intermediate_values.unwrap();
-
+        
         let scale = node_info.fixed_point_scale;
+        let (out_data, intermediate_values) = self.compute(&inp, true, scale);
+        let intermediate_values = intermediate_values.unwrap();
+        
         let output_size = inp[0].1.n_elements().to_usize().unwrap();
         let node_id: BaseField = node_info.id.into();
         let lhs_id: BaseField = node_info.inputs[0].id.into();
@@ -1118,6 +1133,17 @@ impl LuminairOperator<MulColumn, MulTraceTable, ()> for LuminairMul {
         {
             let is_last_idx: u32 = if idx == (output_size - 1) { 1 } else { 0 };
 
+            // DEBUG: Show actual values being stored
+            if idx < 3 { // Only show first few for brevity
+                println!("🔍 DEBUG Mul[{}]: lhs_val = {}, rhs_val = {}, out_val = {}", 
+                    idx, lhs_val.value, rhs_val.value, out_val.value);
+                println!("🔍 DEBUG Mul[{}]: Unscaled lhs = {}, rhs = {}, out = {}", 
+                    idx, 
+                    (lhs_val.value / (1 << scale) as i64) as i32,
+                    (rhs_val.value / (1 << scale) as i64) as i32,
+                    (out_val.value / (1 << scale) as i64) as i32);
+            }
+
             table.add_row(MulTraceTableRow {
                 node_id,
                 lhs_id,
@@ -1128,10 +1154,10 @@ impl LuminairOperator<MulColumn, MulTraceTable, ()> for LuminairMul {
                 next_node_id: node_id,
                 next_lhs_id: lhs_id,
                 next_rhs_id: rhs_id,
-                lhs: lhs_val.to_m31(),
-                rhs: rhs_val.to_m31(),
-                out: out_val.to_m31(),
-                rem: rem_val.to_m31(),
+                lhs: (lhs_val.value as i32).into(),
+                rhs: (rhs_val.value as i32).into(),
+                out: (out_val.value as i32).into(),
+                rem: (rem_val.value as i32).into(),
                 scale: M31::from_u32_unchecked(1 << scale),
                 lhs_mult: -BaseField::one(),
                 rhs_mult: -BaseField::one(),
@@ -1145,7 +1171,7 @@ impl LuminairOperator<MulColumn, MulTraceTable, ()> for LuminairMul {
 
 impl Operator for LuminairMul {
     fn process(&mut self, inp: Vec<(InputTensor, ShapeTracker)>) -> Vec<Tensor> {
-        let (out_data, _) = self.compute(&inp, false);
+        let (out_data, _) = self.compute(&inp, false, 12);
         vec![Tensor::new(StwoData { data: Arc::new(out_data), scale: 12 })]
     }
 }
@@ -1173,6 +1199,7 @@ impl LuminairLessThan {
         &self,
         inp: &[(InputTensor, ShapeTracker)],
         trace_mode: bool,
+        scale: u32,
     ) -> (
         Vec<Fixed>,
         Option<
@@ -1197,7 +1224,7 @@ impl LuminairLessThan {
 
         let mut stack: Vec<i64> = vec![];
         let output_size = inp[0].1.n_elements().to_usize().unwrap();
-        let mut out_data = vec![Fixed::zero(12); output_size];
+        let mut out_data = vec![Fixed::zero(scale); output_size];
 
         // Only allocate for intermediate values if in trace mode
         let mut intermediate_values = if trace_mode {
@@ -1211,9 +1238,9 @@ impl LuminairLessThan {
             let rhs_val = get_index(rhs, &rexpr, &mut stack, idx);
 
             let (out_val, borrow, diff) = if lhs_val.value < rhs_val.value {
-                (Fixed::from_f64(1., 12), 0, rhs_val.value - lhs_val.value)
+                (Fixed::from_f64(1., scale), 0, rhs_val.value - lhs_val.value)
             } else {
-                (Fixed::zero(12), 1, rhs_val.value - lhs_val.value + two_pow_k)
+                (Fixed::zero(scale), 1, rhs_val.value - lhs_val.value + two_pow_k)
             };
             *out = out_val;
 
@@ -1237,7 +1264,8 @@ impl LuminairOperator<LessThanColumn, LessThanTraceTable, RangeCheckLookup<1>>
         node_info: &NodeInfo,
         lookup: &mut RangeCheckLookup<1>,
     ) -> Vec<Tensor> {
-        let (out_data, intermediate_values) = self.compute(&inp, true);
+        let scale = node_info.fixed_point_scale;
+        let (out_data, intermediate_values) = self.compute(&inp, true, scale);
         let intermediate_values = intermediate_values.unwrap();
 
         let output_size = inp[0].1.n_elements().to_usize().unwrap();
@@ -1282,6 +1310,7 @@ impl LuminairOperator<LessThanColumn, LessThanTraceTable, RangeCheckLookup<1>>
                 limb1: M31::from_u32_unchecked(limb1),
                 limb2: M31::from_u32_unchecked(limb2),
                 limb3: M31::from_u32_unchecked(limb3),
+                scale: M31::from_u32_unchecked(1 << scale),
                 lhs_mult: -BaseField::one(),
                 rhs_mult: -BaseField::one(),
                 out_mult,
@@ -1301,7 +1330,7 @@ impl LuminairOperator<LessThanColumn, LessThanTraceTable, RangeCheckLookup<1>>
 
 impl Operator for LuminairLessThan {
     fn process(&mut self, inp: Vec<(InputTensor, ShapeTracker)>) -> Vec<Tensor> {
-        let (out_data, _) = self.compute(&inp, false);
+        let (out_data, _) = self.compute(&inp, false, 12);
         vec![Tensor::new(StwoData { data: Arc::new(out_data), scale: 12 })]
     }
 }
@@ -1329,6 +1358,7 @@ impl LuminairRem {
         &self,
         inp: &[(InputTensor, ShapeTracker)],
         trace_mode: bool,
+        scale: u32,
     ) -> (
         Vec<Fixed>,
         Option<
@@ -1349,7 +1379,7 @@ impl LuminairRem {
 
         let mut stack: Vec<i64> = vec![];
         let output_size = inp[0].1.n_elements().to_usize().unwrap();
-        let mut out_data = vec![Fixed::zero(12); output_size];
+        let mut out_data = vec![Fixed::zero(scale); output_size];
 
         // Only allocate for intermediate values if in trace mode
         let mut intermediate_values = if trace_mode {
@@ -1382,7 +1412,8 @@ impl LuminairOperator<RemColumn, RemTraceTable, ()> for LuminairRem {
         node_info: &NodeInfo,
         _lookup: &mut (),
     ) -> Vec<Tensor> {
-        let (out_data, intermediate_values) = self.compute(&inp, true);
+        let scale = node_info.fixed_point_scale;
+        let (out_data, intermediate_values) = self.compute(&inp, true, scale);
         let intermediate_values = intermediate_values.unwrap();
 
         let output_size = inp[0].1.n_elements().to_usize().unwrap();
@@ -1427,7 +1458,7 @@ impl LuminairOperator<RemColumn, RemTraceTable, ()> for LuminairRem {
 
 impl Operator for LuminairRem {
     fn process(&mut self, inp: Vec<(InputTensor, ShapeTracker)>) -> Vec<Tensor> {
-        let (out_data, _) = self.compute(&inp, false);
+        let (out_data, _) = self.compute(&inp, false, 12);
         vec![Tensor::new(StwoData { data: Arc::new(out_data), scale: 12 })]
     }
 }
@@ -1457,6 +1488,7 @@ impl LuminairSumReduce {
         &self,
         inp: &[(InputTensor, ShapeTracker)],
         trace_mode: bool,
+        scale: u32,
     ) -> (
         Vec<Fixed>,
         Option<
@@ -1476,7 +1508,7 @@ impl LuminairSumReduce {
         let dim_size = sh[self.0];
 
         let output_size = front_size * back_size;
-        let mut out_data = vec![Fixed::zero(12); output_size];
+        let mut out_data = vec![Fixed::zero(scale); output_size];
         let input = get_buffer_from_tensor(&inp[0].0).unwrap();
         let expr = (inp[0].1.index_expression(), inp[0].1.valid_expression());
         let mut stack: Vec<i64> = vec![];
@@ -1490,7 +1522,7 @@ impl LuminairSumReduce {
 
         for i in 0..front_size {
             for j in 0..back_size {
-                let mut acc = Fixed::zero(12); // Initialize accumulator for each (i, j)
+                let mut acc = Fixed::zero(scale); // Initialize accumulator for each (i, j)
                 for k in 0..dim_size {
                     let orig_index = i * dim_size * back_size + k * back_size + j;
                     let input_val = get_index(input, &expr, &mut stack, orig_index);
@@ -1502,7 +1534,7 @@ impl LuminairSumReduce {
                         out_data[idx] = next_acc;
                         (next_acc, BaseField::one())
                     } else {
-                        (Fixed::zero(12), BaseField::zero()) // Placeholder for incomplete reductions
+                        (Fixed::zero(scale), BaseField::zero()) // Placeholder for incomplete reductions
                     };
 
                     // Record intermediate values if in trace mode
@@ -1527,7 +1559,8 @@ impl LuminairOperator<SumReduceColumn, SumReduceTraceTable, ()> for LuminairSumR
         node_info: &NodeInfo,
         _lookup: &mut (),
     ) -> Vec<Tensor> {
-        let (out_data, intermediate_values) = self.compute(&inp, true);
+        let scale = node_info.fixed_point_scale;
+        let (out_data, intermediate_values) = self.compute(&inp, true, scale);
         let intermediate_values = intermediate_values.unwrap();
 
         let node_id: BaseField = node_info.id.into();
@@ -1571,7 +1604,7 @@ impl LuminairOperator<SumReduceColumn, SumReduceTraceTable, ()> for LuminairSumR
 
 impl Operator for LuminairSumReduce {
     fn process(&mut self, inp: Vec<(InputTensor, ShapeTracker)>) -> Vec<Tensor> {
-        let (out_data, _) = self.compute(&inp, false);
+        let (out_data, _) = self.compute(&inp, false, 12);
         vec![Tensor::new(StwoData { data: Arc::new(out_data), scale: 12 })]
     }
 }
@@ -1598,6 +1631,7 @@ impl LuminairMaxReduce {
         &self,
         inp: &[(InputTensor, ShapeTracker)],
         trace_mode: bool,
+        scale: u32,
     ) -> (
         Vec<Fixed>,
         Option<
@@ -1618,7 +1652,7 @@ impl LuminairMaxReduce {
         let dim_size = sh[self.0];
 
         let output_size = front_size * back_size;
-        let mut out_data = vec![Fixed::zero(12); output_size];
+        let mut out_data = vec![Fixed::zero(scale); output_size];
         let input = get_buffer_from_tensor(&inp[0].0).unwrap();
         let expr = (inp[0].1.index_expression(), inp[0].1.valid_expression());
         let mut stack: Vec<i64> = vec![];
@@ -1659,7 +1693,7 @@ impl LuminairMaxReduce {
                         out_data[i * back_size + j] = next_max_val;
                         (next_max_val, BaseField::one())
                     } else {
-                        (Fixed::zero(12), BaseField::zero()) // Placeholder for incomplete reductions
+                        (Fixed::zero(scale), BaseField::zero()) // Placeholder for incomplete reductions
                     };
 
                     let idx = i * back_size + j; // Index for out_data
@@ -1695,7 +1729,8 @@ impl LuminairOperator<MaxReduceColumn, MaxReduceTraceTable, ()> for LuminairMaxR
         node_info: &NodeInfo,
         _lookup: &mut (),
     ) -> Vec<Tensor> {
-        let (out_data, intermediate_values) = self.compute(&inp, true);
+        let scale = node_info.fixed_point_scale;
+        let (out_data, intermediate_values) = self.compute(&inp, true, scale);
         let intermediate_values = intermediate_values.unwrap();
 
         let node_id: BaseField = node_info.id.into();
@@ -1740,7 +1775,7 @@ impl LuminairOperator<MaxReduceColumn, MaxReduceTraceTable, ()> for LuminairMaxR
 
 impl Operator for LuminairMaxReduce {
     fn process(&mut self, inp: Vec<(InputTensor, ShapeTracker)>) -> Vec<Tensor> {
-        let (out_data, _) = self.compute(&inp, false);
+        let (out_data, _) = self.compute(&inp, false, 12);
         vec![Tensor::new(StwoData { data: Arc::new(out_data), scale: 12 })]
     }
 }

@@ -186,14 +186,14 @@ pub fn lookups_to_preprocessed_column(lookups: &Lookups, scale: u32) -> Vec<Box<
         lut_cols.push(Box::new(col_1));
     }
     if let Some(exp2_lookup) = &lookups.exp2 {
-        let col_0 = Exp2PreProcessed::new(exp2_lookup.layout.clone(), 0);
-        let col_1 = Exp2PreProcessed::new(exp2_lookup.layout.clone(), 1);
+        let col_0 = Exp2PreProcessed::new(exp2_lookup.layout.clone(), 0, scale);
+        let col_1 = Exp2PreProcessed::new(exp2_lookup.layout.clone(), 1, scale);
         lut_cols.push(Box::new(col_0));
         lut_cols.push(Box::new(col_1));
     }
     if let Some(log2_lookup) = &lookups.log2 {
-        let col_0 = Log2PreProcessed::new(log2_lookup.layout.clone(), 0);
-        let col_1 = Log2PreProcessed::new(log2_lookup.layout.clone(), 1);
+        let col_0 = Log2PreProcessed::new(log2_lookup.layout.clone(), 0, scale);
+        let col_1 = Log2PreProcessed::new(log2_lookup.layout.clone(), 1, scale);
         lut_cols.push(Box::new(col_0));
         lut_cols.push(Box::new(col_1));
     }
@@ -400,16 +400,18 @@ pub struct Exp2PreProcessed {
     pub layout: LookupLayout,
     /// Index of this specific column (0 for input, 1 for output)
     pub col_index: usize,
+    /// Fixed-point scale used for this preprocessing column
+    pub scale: u32,
 }
 
 impl Exp2PreProcessed {
     /// Creates a new Exp2PreProcessed with the specified layout and column index
     ///
     /// Asserts that the column index is less than 2 (exp2 LUT has 2 columns)
-    pub fn new(layout: LookupLayout, col_index: usize) -> Self {
+    pub fn new(layout: LookupLayout, col_index: usize, scale: u32) -> Self {
         assert!(col_index < 2, "Exp2 LUT must have 2 columns");
 
-        Self { layout, col_index }
+        Self { layout, col_index, scale }
     }
 
     /// Returns the circle evaluation for this exponential lookup column
@@ -452,12 +454,12 @@ impl PreProcessedColumn for Exp2PreProcessed {
 
         for (i, value) in all_values.iter().enumerate() {
             match self.col_index {
-                0 => column.set(i, Fixed::new(*value, 12).to_m31()),
+                0 => column.set(i, Fixed::new(*value, self.scale).to_m31()),
                 1 => column.set(
                     i,
                     Fixed::from_f64(
-                        Fixed::new(*value, 12).to_f64().exp2(),
-                        12,
+                        Fixed::new(*value, self.scale).to_f64().exp2(),
+                        self.scale,
                     )
                     .to_m31(),
                 ),
@@ -484,16 +486,18 @@ pub struct Log2PreProcessed {
     pub layout: LookupLayout,
     /// Index of this specific column (0 for input, 1 for output)
     pub col_index: usize,
+    /// Fixed-point scale used for this preprocessing column
+    pub scale: u32,
 }
 
 impl Log2PreProcessed {
     /// Creates a new Log2PreProcessed with the specified layout and column index
     ///
     /// Asserts that the column index is less than 2 (log2 LUT has 2 columns)
-    pub fn new(layout: LookupLayout, col_index: usize) -> Self {
+    pub fn new(layout: LookupLayout, col_index: usize, scale: u32) -> Self {
         assert!(col_index < 2, "Log2 LUT must have 2 columns");
 
-        Self { layout, col_index }
+        Self { layout, col_index, scale }
     }
 
     /// Returns the circle evaluation for this logarithm lookup column
@@ -536,12 +540,12 @@ impl PreProcessedColumn for Log2PreProcessed {
 
         for (i, value) in all_values.iter().enumerate() {
             match self.col_index {
-                0 => column.set(i, Fixed::new(*value, 12).to_m31()),
+                0 => column.set(i, Fixed::new(*value, self.scale).to_m31()),
                 1 => column.set(
                     i,
                     Fixed::from_f64(
-                        Fixed::new(*value, 12).to_f64().log2(),
-                        12,
+                        Fixed::new(*value, self.scale).to_f64().log2(),
+                        self.scale,
                     )
                     .to_m31(),
                 ),

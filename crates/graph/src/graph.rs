@@ -22,7 +22,7 @@ use luminair_air::{
             Lookups,
         },
         max_reduce::table::{MaxReduceColumn, MaxReduceTraceTable},
-        mul::table::{MulTraceTable},
+        mul::table::{MulColumn, MulTraceTable},
         recip::table::{RecipTraceTable},
         rem::table::{RemColumn, RemTraceTable},
         sin::table::{SinColumn, SinTraceTable},
@@ -314,6 +314,12 @@ impl LuminairGraph for Graph {
                     op_counter.add += 1;
                     <Box<dyn Operator> as HasProcessTrace<AddColumn, AddTraceTable, ()>>::call_process_trace(
                         node_op, srcs, &mut add_table, &node_info, &mut ()
+                    ).unwrap()
+                }
+                _ if <Box<dyn Operator> as HasProcessTrace<MulColumn, MulTraceTable, ()>>::has_process_trace(node_op) => {
+                    op_counter.mul += 1;
+                    <Box<dyn Operator> as HasProcessTrace<MulColumn, MulTraceTable, ()>>::call_process_trace(
+                        node_op, srcs, &mut mul_table, &node_info, &mut ()
                     ).unwrap()
                 }
                 _ if <Box<dyn Operator> as HasProcessTrace<SumReduceColumn, SumReduceTraceTable, ()>>::has_process_trace(node_op) => {

@@ -15,7 +15,7 @@ use stwo_constraint_framework::{LogupTraceGenerator, Relation};
 
 use super::table::{MulColumn, MulTraceTable, MulTraceTableRow, PackedMulTraceTableRow};
 
-pub(crate) const N_TRACE_COLUMNS: usize = 16;
+pub(crate) const N_TRACE_COLUMNS: usize = 17;
 
 pub struct ClaimGenerator {
     pub inputs: MulTraceTable,
@@ -89,6 +89,7 @@ fn write_trace_simd(
             *row[MulColumn::Rhs.index()] = input.rhs;
             *row[MulColumn::Out.index()] = input.out;
             *row[MulColumn::Rem.index()] = input.rem;
+            *row[MulColumn::Scale.index()] = input.scale;
             *row[MulColumn::LhsMult.index()] = input.lhs_mult;
             *row[MulColumn::RhsMult.index()] = input.rhs_mult;
             *row[MulColumn::OutMult.index()] = input.out_mult;

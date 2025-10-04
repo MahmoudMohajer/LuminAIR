@@ -50,16 +50,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let proof = prove(trace, settings.clone())?;
         println!("✅ Proof generated successfully with scale {}", scale);
         
-        println!("❗ Verification fails with InvalidLogUp error");
-        // verify(proof, settings)?; // Commented out to prevent crash
+        verify(proof, settings)?;
+        println!("✅ Verification successful with scale {}", scale);
         
-        println!("🎯 DYNAMIC SCALING WORKS - verification issue separate!");
+        println!("🎯 DYNAMIC SCALING WORKS - verification successful!");
     }
     
     // Simple test without loops
     let mut settings = cx.gen_circuit_settings(12); // Use DEFAULT_FP_SCALE to match AIR components
     print!("Final fps: {:?}", settings.fixed_point_scale);
     println!("Settings generated successfully. ✅");
+    
+    println!("🔍 DEBUG: About to execute with scale = {}", settings.fixed_point_scale);
 
     // ======= Execute graph & generate trace =======
     println!("Executing graph and generating execution trace...");
