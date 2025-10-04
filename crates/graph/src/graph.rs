@@ -4,6 +4,7 @@ use crate::{
         HasProcessTrace,
     },
     utils::compute_padded_range_from_srcs,
+    data::StwoData,
 };
 use itertools::Itertools;
 use luminair_air::{
@@ -43,6 +44,22 @@ use numerair::Fixed;
 use petgraph::{stable_graph::StableGraph, visit::EdgeRef, Direction};
 use regex::Regex;
 use rustc_hash::FxHashMap;
+use std::borrow::Borrow;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
+
+// Global scale context for operations that don't have access to dynamic scale
+static CURRENT_SCALE: AtomicU32 = AtomicU32::new(12);
+
+/// Sets the current global scale for operations
+pub fn set_current_scale(scale: u32) {
+    CURRENT_SCALE.store(scale, Ordering::SeqCst);
+}
+
+/// Gets the current global scale for operations
+pub fn get_current_scale() -> u32 {
+    CURRENT_SCALE.load(Ordering::SeqCst)
+}
 
 // Helper function to handle operator dispatch
 fn try_process_operator<C, T, L>(
@@ -109,6 +126,9 @@ pub trait LuminairGraph {
 impl LuminairGraph for Graph {
     /// Generates circuit settings by analyzing the graph structure and operations
     fn gen_circuit_settings(&mut self, fixed_point_scale: u32) -> CircuitSettings {
+        // Set the global scale context for operations that don't have access to dynamic scale
+        set_current_scale(fixed_point_scale);
+        
         // Track the number of views pointing to each tensor so we know when to clear
         if self.linearized_graph.is_none() {
             self.toposort();
@@ -210,6 +230,9 @@ impl LuminairGraph for Graph {
     }
 
     fn gen_trace(&mut self, settings: &mut CircuitSettings) -> Result<LuminairPie, LuminairError> {
+        // Set the global scale context for operations that don't have access to dynamic scale
+        set_current_scale(settings.fixed_point_scale);
+        
         // Track the number of views pointing to each tensor so we know when to clear
         if self.linearized_graph.is_none() {
             self.toposort();

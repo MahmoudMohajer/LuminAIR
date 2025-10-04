@@ -20,7 +20,11 @@ use crate::LuminairInteractionClaim;
 
 #[inline]
 pub fn calculate_log_size(max_size: usize) -> u32 {
-    ((max_size + (1 << LOG_N_LANES) - 1) >> LOG_N_LANES)
+    // Ensure minimum size for STWO library requirements
+    let min_size = 1 << 10; // Minimum 1024 entries
+    let effective_size = max_size.max(min_size);
+    
+    ((effective_size + (1 << LOG_N_LANES) - 1) >> LOG_N_LANES)
         .next_power_of_two()
         .trailing_zeros()
         + LOG_N_LANES

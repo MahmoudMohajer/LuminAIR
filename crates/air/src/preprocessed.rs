@@ -567,12 +567,12 @@ mod range_tests {
     use super::*;
 
     fn range(min: i64, max: i64) -> Range {
-        Range(Fixed(min), Fixed(max))
+        Range(Fixed::new(min, 12), Fixed::new(max, 12))
     }
 
     fn calculate_expected_indices(ranges: &[Range]) -> Vec<(i64, Option<usize>)> {
         // Get all values from ranges
-        let mut all_values: Vec<i64> = ranges.iter().flat_map(|r| (r.0 .0..=r.1 .0)).collect();
+        let mut all_values: Vec<i64> = ranges.iter().flat_map(|r| (r.0.value..=r.1.value)).collect();
 
         // Sort and deduplicate (mimicking what SinPreProcessed does)
         all_values.sort_unstable();
