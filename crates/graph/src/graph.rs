@@ -4,7 +4,6 @@ use crate::{
         HasProcessTrace,
     },
     utils::compute_padded_range_from_srcs,
-    data::StwoData,
 };
 use itertools::Itertools;
 use luminair_air::{
@@ -44,9 +43,7 @@ use numerair::Fixed;
 use petgraph::{stable_graph::StableGraph, visit::EdgeRef, Direction};
 use regex::Regex;
 use rustc_hash::FxHashMap;
-use std::borrow::Borrow;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::Arc;
 
 // Global scale context for operations that don't have access to dynamic scale
 static CURRENT_SCALE: AtomicU32 = AtomicU32::new(12);
