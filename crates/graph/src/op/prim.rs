@@ -975,23 +975,6 @@ impl LuminairAdd {
             let lhs_val = get_index(lhs, &lexpr, &mut stack, idx);
             let rhs_val = get_index(rhs, &rexpr, &mut stack, idx);
             
-            // Debug: check scales and values before addition
-            if lhs_val.scale != rhs_val.scale {
-                eprintln!("Scale mismatch in Add::compute: lhs={}, rhs={}, scale param={}",
-                    lhs_val.scale, rhs_val.scale, scale);
-            }
-            
-            // Check if values are too large for addition
-            let lhs_f64 = lhs_val.to_f64();
-            let rhs_f64 = rhs_val.to_f64();
-            if lhs_f64.abs() > 1000000.0 || rhs_f64.abs() > 1000000.0 {
-                eprintln!("Large values in Add::compute: lhs={}, rhs={}, scale={}",
-                    lhs_f64, rhs_f64, scale);
-                eprintln!("  lhs internal value: {}, rhs internal value: {}", 
-                    lhs_val.value, rhs_val.value);
-                eprintln!("  Global scale context: {}", crate::graph::get_current_scale());
-            }
-            
             // Use wrapping arithmetic to prevent panic while preserving mathematical correctness
             // This allows the computation to continue even with overflow, which is acceptable
             // for neural network inference where exact precision is not critical
@@ -1161,16 +1144,6 @@ impl LuminairOperator<MulColumn, MulTraceTable, ()> for LuminairMul {
         {
             let is_last_idx: u32 = if idx == (output_size - 1) { 1 } else { 0 };
 
-            // DEBUG: Show actual values being stored
-            if idx < 3 { // Only show first few for brevity
-                println!("🔍 DEBUG Mul[{}]: lhs_val = {}, rhs_val = {}, out_val = {}", 
-                    idx, lhs_val.value, rhs_val.value, out_val.value);
-                println!("🔍 DEBUG Mul[{}]: Unscaled lhs = {}, rhs = {}, out = {}", 
-                    idx, 
-                    (lhs_val.value / (1 << scale) as i64) as i32,
-                    (rhs_val.value / (1 << scale) as i64) as i32,
-                    (out_val.value / (1 << scale) as i64) as i32);
-            }
 
             table.add_row(MulTraceTableRow {
                 node_id,
