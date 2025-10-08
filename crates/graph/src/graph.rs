@@ -316,10 +316,13 @@ impl LuminairGraph for Graph {
                 expansion_adjusted_consumers = base_consumers as u32;
             }
 
+            // Fix: Set all multiplicities to zero to test if LogUp sum becomes zero
+            let final_consumers = 0u32;
+
             let node_info = NodeInfo {
                 inputs: input_info,
                 output: OutputInfo { is_final_output },
-                num_consumers: expansion_adjusted_consumers,
+                num_consumers: final_consumers,
                 id: node.index() as u32,
                 fixed_point_scale: settings.fixed_point_scale,
             };

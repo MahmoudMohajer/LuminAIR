@@ -93,7 +93,11 @@ fn main() {
 
     // Verify the proof
     let t_verify = Instant::now();
-    let is_verified = verify(zk_proof, settings).is_ok();
+    let verify_result = verify(zk_proof, settings);
+    let is_verified = verify_result.is_ok();
+    if let Err(e) = verify_result {
+        println!("Verification error: {:?}", e);
+    }
     let dt_verify = t_verify.elapsed();
 
     // ======= Display Risk Metrics for Protocol Governance =======

@@ -69,9 +69,11 @@ pub fn log_sum_valid(interaction_claim: &LuminairInteractionClaim) -> bool {
     if !is_valid {
         warn!("LogUp sum validation failed. Total sum is non-zero: {:?}", sum);
         warn!("Component contributions:");
-        for (name, contrib) in component_sums {
+        for (name, contrib) in &component_sums {
             warn!("  {}: {:?}", name, contrib);
         }
+    } else {
+        debug!("LogUp sum validation passed. Total sum is zero.");
     }
 
     is_valid

@@ -133,6 +133,7 @@ impl InteractionClaimGenerator {
             let values = &self.lookup_data.lhs[row];
             let multiplicity = &self.lookup_data.lhs_mult[row];
 
+
             let denom: PackedQM31 = node_elements.combine(values);
             col_gen.write_frac(row, (*multiplicity).into(), denom);
         }
@@ -142,6 +143,7 @@ impl InteractionClaimGenerator {
         for row in 0..1 << (self.log_size - LOG_N_LANES) {
             let values = &self.lookup_data.rhs[row];
             let multiplicity = &self.lookup_data.rhs_mult[row];
+
 
             let denom: PackedQM31 = node_elements.combine(values);
             col_gen.write_frac(row, (*multiplicity).into(), denom);

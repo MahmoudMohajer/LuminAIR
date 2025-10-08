@@ -175,6 +175,7 @@ impl InteractionClaimGenerator {
             let values = &self.lookup_data.out[row];
             let multiplicity = &self.lookup_data.out_mult[row];
 
+
             let denom: PackedQM31 = node_elements.combine(values);
             col_gen.write_frac(row, (*multiplicity).into(), denom);
         }
