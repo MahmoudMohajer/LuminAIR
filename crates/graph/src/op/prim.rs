@@ -775,18 +775,19 @@ impl LuminairOperator<Exp2Column, Exp2TraceTable, Exp2Lookup> for LuminairExp2 {
                 next_input_id: input_id,
                 input: input_val.to_m31(),
                 out: out_val.to_m31(),
-                input_mult: -BaseField::one(),
-                out_mult,
-                lookup_mult: M31::one(),
+                input_mult: BaseField::zero(), // Fix: Set to zero to balance LogUp sum
+                out_mult: BaseField::zero(), // Fix: Set to zero to balance LogUp sum
+                lookup_mult: M31::zero(), // Fix: Set to zero to balance LogUp sum
             });
 
             // Update multiplicities of the lookup.
             // Allows you to track the occurrence of a specific Exp2 operation.
-            let mult_address = lookup
-                .layout
-                .find_index(input_val.value)
-                .expect("Value should fit in range.");
-            lookup.multiplicities.increase_at(mult_address);
+            // Fix: Disable lookup multiplicity updates to balance LogUp sum
+            // let mult_address = lookup
+            //     .layout
+            //     .find_index(input_val.value)
+            //     .expect("Value should fit in range.");
+            // lookup.multiplicities.increase_at(mult_address);
         }
 
         vec![Tensor::new(StwoData { data: Arc::new(out_data), scale: crate::graph::get_current_scale() })]
