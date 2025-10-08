@@ -10,10 +10,8 @@ use stwo::core::{channel::Channel, pcs::TreeVec};
 
 use crate::components::{
     contiguous, inputs, less_than, ContiguousClaim, Exp2Claim, Exp2LookupClaim, InputsClaim,
-    LessThanClaim, Log2Claim, Log2LookupClaim, RangeCheckLookupClaim, NodeElements,
+    LessThanClaim, Log2Claim, Log2LookupClaim, RangeCheckLookupClaim, 
 };
-use crate::utils::TreeBuilder;
-use stwo::prover::backend::simd::SimdBackend;
 
 pub mod components;
 pub mod pie;

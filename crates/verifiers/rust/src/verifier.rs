@@ -6,7 +6,7 @@ use luminair_air::{
 };
 use luminair_prover::LuminairProof;
 use luminair_utils::LuminairError;
-use tracing::{info, span, warn, Level};
+use tracing::{info, span, Level};
 
 use stwo::core::{
     channel::Blake2sChannel,

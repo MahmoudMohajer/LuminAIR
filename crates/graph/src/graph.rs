@@ -58,31 +58,6 @@ pub fn get_current_scale() -> u32 {
     CURRENT_SCALE.load(Ordering::SeqCst)
 }
 
-// Helper function to handle operator dispatch
-fn try_process_operator<C, T, L>(
-    node_op: &mut Box<dyn Operator>,
-    srcs: Vec<(InputTensor, ShapeTracker)>,
-    table: &mut T,
-    node_info: &NodeInfo,
-    lookup: &mut L,
-    op_counter: &mut OpCounter,
-    counter_field: &mut usize,
-    scale: u32,
-) -> Option<Vec<Tensor>>
-where
-    C: luminair_air::components::TraceColumn + std::fmt::Debug + 'static,
-    T: std::fmt::Debug + 'static,
-    L: std::fmt::Debug + 'static,
-{
-    if <Box<dyn Operator> as HasProcessTrace<C, T, L>>::has_process_trace(node_op) {
-        *counter_field += 1;
-        Some(<Box<dyn Operator> as HasProcessTrace<C, T, L>>::call_process_trace(
-            node_op, srcs, table, node_info, lookup
-        ).unwrap())
-    } else {
-        None
-    }
-}
 
 // Macro to handle trace table conversion
 macro_rules! convert_trace_table {
@@ -244,8 +219,8 @@ impl LuminairGraph for Graph {
         // Initializes table for each operator
         let mut add_table = AddTraceTable::new();
         let mut mul_table = MulTraceTable::new();
-        let mut recip_table = RecipTraceTable::new();
-        let mut sin_table = SinTraceTable::new();
+        let recip_table = RecipTraceTable::new();
+        let sin_table = SinTraceTable::new();
         let mut sin_lookup_table = SinLookupTraceTable::new();
         let mut sum_reduce_table = SumReduceTraceTable::new();
         let mut max_reduce_table = MaxReduceTraceTable::new();
@@ -323,25 +298,24 @@ impl LuminairGraph for Graph {
             // The LogUp protocol requires that multiplicities balance for data flow integrity.
             // When graph optimizations change the actual consumption pattern, we need to
             // adjust the consumer counting to match the actual trace structure.
-            let mut final_consumers = expansion_adjusted_consumers;
             
             // Apply corrections for nodes affected by graph optimizations
             // These corrections are based on analysis of the actual trace structure
             // and ensure that the LogUp protocol maintains its security guarantees.
-            match node.index() {
+            let final_consumers = match node.index() {
                 4 => {
                     // Node 4 (LESS_THAN output) has 3 graph consumers but only 2 trace consumers
                     // The MUL operation consumes different nodes due to graph optimization
                     // where the multiplication is fused with other operations
-                    final_consumers = 2; // Only ADD and SUM_REDUCE actually consume node 4
+                    2 // Only ADD and SUM_REDUCE actually consume node 4
                 }
                 // Add more corrections as needed for other affected nodes
                 // These corrections ensure that the LogUp sum balances correctly
                 _ => {
                     // For other nodes, use the expansion-adjusted consumers
-                    final_consumers = expansion_adjusted_consumers;
+                    expansion_adjusted_consumers
                 }
-            }
+            };
 
             let node_info = NodeInfo {
                 inputs: input_info,
