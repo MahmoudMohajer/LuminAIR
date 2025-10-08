@@ -10,8 +10,10 @@ use stwo::core::{channel::Channel, pcs::TreeVec};
 
 use crate::components::{
     contiguous, inputs, less_than, ContiguousClaim, Exp2Claim, Exp2LookupClaim, InputsClaim,
-    LessThanClaim, Log2Claim, Log2LookupClaim, RangeCheckLookupClaim,
+    LessThanClaim, Log2Claim, Log2LookupClaim, RangeCheckLookupClaim, NodeElements,
 };
+use crate::utils::TreeBuilder;
+use stwo::prover::backend::simd::SimdBackend;
 
 pub mod components;
 pub mod pie;
@@ -183,6 +185,7 @@ pub struct LuminairInteractionClaimGenerator {
     pub contiguous: Option<contiguous::witness::InteractionClaimGenerator>,
 }
 
+
 /// Collection of interaction claims for all components
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub struct LuminairInteractionClaim {
@@ -204,6 +207,7 @@ pub struct LuminairInteractionClaim {
     pub inputs: Option<InteractionClaim>,
     pub contiguous: Option<InteractionClaim>,
 }
+
 
 impl LuminairInteractionClaim {
     /// Mixes all interaction claims into the given channel

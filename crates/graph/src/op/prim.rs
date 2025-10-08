@@ -775,19 +775,18 @@ impl LuminairOperator<Exp2Column, Exp2TraceTable, Exp2Lookup> for LuminairExp2 {
                 next_input_id: input_id,
                 input: input_val.to_m31(),
                 out: out_val.to_m31(),
-                input_mult: BaseField::zero(), // Fix: Set to zero to balance LogUp sum
-                out_mult: BaseField::zero(), // Fix: Set to zero to balance LogUp sum
-                lookup_mult: M31::zero(), // Fix: Set to zero to balance LogUp sum
+                input_mult: -BaseField::one(), // Restore proper input multiplicity
+                out_mult, // Restore proper output multiplicity
+                lookup_mult: M31::one(), // Restore proper lookup multiplicity
             });
 
             // Update multiplicities of the lookup.
             // Allows you to track the occurrence of a specific Exp2 operation.
-            // Fix: Disable lookup multiplicity updates to balance LogUp sum
-            // let mult_address = lookup
-            //     .layout
-            //     .find_index(input_val.value)
-            //     .expect("Value should fit in range.");
-            // lookup.multiplicities.increase_at(mult_address);
+            let mult_address = lookup
+                .layout
+                .find_index(input_val.value)
+                .expect("Value should fit in range.");
+            lookup.multiplicities.increase_at(mult_address);
         }
 
         vec![Tensor::new(StwoData { data: Arc::new(out_data), scale: crate::graph::get_current_scale() })]
@@ -1030,9 +1029,9 @@ impl LuminairOperator<AddColumn, AddTraceTable, ()> for LuminairAdd {
                 lhs: lhs_val.to_m31(),
                 rhs: rhs_val.to_m31(),
                 out: out_val.to_m31(),
-                lhs_mult: BaseField::zero(), // Fix: Set to zero to balance LogUp sum
-                rhs_mult: BaseField::zero(), // Fix: Set to zero to balance LogUp sum
-                out_mult: BaseField::zero(), // Fix: Set to zero to balance LogUp sum
+                lhs_mult: -BaseField::one(), // Restore proper input multiplicity
+                rhs_mult: -BaseField::one(), // Restore proper input multiplicity
+                out_mult, // Restore proper output multiplicity
             })
         }
 
@@ -1161,9 +1160,9 @@ impl LuminairOperator<MulColumn, MulTraceTable, ()> for LuminairMul {
                 out: out_val.to_m31(),
                 rem: rem_val.to_m31(),
                 scale: M31::from_u32_unchecked(1 << scale),
-                lhs_mult: BaseField::zero(), // Fix: Set to zero to balance LogUp sum
-                rhs_mult: BaseField::zero(), // Fix: Set to zero to balance LogUp sum
-                out_mult: BaseField::zero(), // Fix: Set to zero to balance LogUp sum
+                lhs_mult: -BaseField::one(), // Restore proper input multiplicity
+                rhs_mult: -BaseField::one(), // Restore proper input multiplicity
+                out_mult, // Restore proper output multiplicity
             })
         }
 
@@ -1313,18 +1312,17 @@ impl LuminairOperator<LessThanColumn, LessThanTraceTable, RangeCheckLookup<1>>
                 limb2: M31::from_u32_unchecked(limb2),
                 limb3: M31::from_u32_unchecked(limb3),
                 scale: M31::from_u32_unchecked(1 << scale),
-                lhs_mult: BaseField::zero(), // Fix: Set to zero to balance LogUp sum
-                rhs_mult: BaseField::zero(), // Fix: Set to zero to balance LogUp sum
-                out_mult: BaseField::zero(), // Fix: Set to zero to balance LogUp sum
-                range_check_mult: M31::zero(), // Fix: Set to zero to balance LogUp sum
+                lhs_mult: -BaseField::one(), // Restore proper input multiplicity
+                rhs_mult: -BaseField::one(), // Restore proper input multiplicity
+                out_mult, // Restore proper output multiplicity
+                range_check_mult: -M31::one(), // Restore proper range check multiplicity
             });
 
             // Update multiplicities of the lookup for each limb
-            // Fix: Disable lookup multiplicity updates to balance LogUp sum
-            // lookup.multiplicities.increase_at(limb0 as usize);
-            // lookup.multiplicities.increase_at(limb1 as usize);
-            // lookup.multiplicities.increase_at(limb2 as usize);
-            // lookup.multiplicities.increase_at(limb3 as usize);
+            lookup.multiplicities.increase_at(limb0 as usize);
+            lookup.multiplicities.increase_at(limb1 as usize);
+            lookup.multiplicities.increase_at(limb2 as usize);
+            lookup.multiplicities.increase_at(limb3 as usize);
         }
 
         vec![Tensor::new(StwoData { data: Arc::new(out_data), scale: crate::graph::get_current_scale() })]
@@ -1596,8 +1594,8 @@ impl LuminairOperator<SumReduceColumn, SumReduceTraceTable, ()> for LuminairSumR
                 acc: acc.to_m31(),
                 next_acc: next_acc.to_m31(),
                 is_last_step,
-                input_mult: BaseField::zero(), // Fix: Set to zero to balance LogUp sum
-                out_mult: BaseField::zero(), // Fix: Set to zero to balance LogUp sum
+                input_mult: -BaseField::one(), // Restore proper input multiplicity
+                out_mult, // Restore proper output multiplicity
             });
         }
 
